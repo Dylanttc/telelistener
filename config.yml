@@ -15,6 +15,18 @@ keywords:
     - "reserved"
     - "taken"
 
+# Message must ALSO contain at least one of these selling-intent keywords
+# (AND logic with include keywords above — both must match)
+intent_keywords:
+  - "sale"
+  - "sell"
+  - "selling"
+  - "letting go"
+  - "let go"
+  - "swap"
+  - "give away"
+  - "transfer"
+
 # If true, messages must also contain a time (e.g. "7pm", "19:00") to be forwarded
 require_time: true
 

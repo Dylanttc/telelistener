@@ -69,6 +69,13 @@ def passes_filter(text: str, config: dict) -> tuple[bool, str]:
         if not matched_kw:
             return False, "no include keyword matched"
 
+    # Intent keywords — at least one must match (AND with venue keywords)
+    intent_kws = config.get("intent_keywords", [])
+    if intent_kws:
+        matched_intent = next((kw for kw in intent_kws if kw.lower() in text_lower), None)
+        if not matched_intent:
+            return False, "no selling intent keyword matched"
+
     if config.get("require_time", False):
         time_regex = config.get("time_regex", "")
         if time_regex and not re.search(time_regex, text, re.IGNORECASE):
