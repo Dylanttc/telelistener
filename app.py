@@ -136,12 +136,12 @@ async def main():
         text = event.message.text or ""
 
         if is_duplicate(text):
-            log.debug("SKIP [duplicate] %s", text[:60].replace("\n", " "))
+            log.info("SKIP [duplicate] %s", text[:60].replace("\n", " "))
             return
 
         passed, reason = passes_filter(text, config)
         if not passed:
-            log.debug("SKIP [%s] %s", reason, text[:60].replace("\n", " "))
+            log.info("SKIP [%s] %s", reason, text[:60].replace("\n", " "))
             return
 
         preview = text[:80].replace("\n", " ")
