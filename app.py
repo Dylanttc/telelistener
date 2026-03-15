@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError
 from telethon.sessions import StringSession
+from telethon.network import ConnectionTcpObfuscated
 
 load_dotenv()
 
@@ -108,7 +109,7 @@ async def main():
         log.info("Using local session file")
         session = "session"
 
-    client = TelegramClient(session, api_id, api_hash)
+    client = TelegramClient(session, api_id, api_hash, connection=ConnectionTcpObfuscated)
     if session_string:
         await client.connect()
         if not await client.is_user_authorized():
