@@ -1,0 +1,23 @@
+keywords:
+  # Messages must contain at least one of these to be forwarded
+  include:
+    - "deyi"
+    - "teck ghee"
+    - "mayflower"
+    - "ang mo kio"
+    - "bishan"
+    - "yio chu kang"
+    - "peirce"
+
+  # Messages containing any of these will be ignored
+  exclude:
+    - "sold"
+    - "reserved"
+    - "taken"
+
+# If true, messages must also contain a time (e.g. "7pm", "19:00") to be forwarded
+require_time: true
+
+# Regex pattern used to detect times in messages
+# Matches: 6am–10am/pm, and 18:00–22:59
+time_regex: "\\b(6|7|8|9|10)(?:am|pm)\\b|\\b(18|19|20|21|22):?[0-5]?[0-9]\\b"

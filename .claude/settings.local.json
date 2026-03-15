@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -m pip install pypdf pdfplumber -q)",
+      "Bash(py -c \":*)"
+    ]
+  }
+}

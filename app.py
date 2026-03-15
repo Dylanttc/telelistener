@@ -1,0 +1,149 @@
+import os
+import re
+import hashlib
+import asyncio
+import logging
+
+import yaml
+from dotenv import load_dotenv
+from telethon import TelegramClient, events
+from telethon.errors import FloodWaitError
+from telethon.sessions import StringSession
+
+load_dotenv()
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("bot.log", encoding="utf-8"),
+    ],
+)
+log = logging.getLogger(__name__)
+
+
+# ── Config ───────────────────────────────────────────────────────────────────
+def load_config() -> dict:
+    with open("config.yml", "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+# ── Duplicate suppression ────────────────────────────────────────────────────
+_seen: set[str] = set()
+_MAX_SEEN = 500
+
+
+def _hash(text: str) -> str:
+    return hashlib.md5(text.strip().lower().encode()).hexdigest()
+
+
+def is_duplicate(text: str) -> bool:
+    h = _hash(text)
+    if h in _seen:
+        return True
+    _seen.add(h)
+    if len(_seen) > _MAX_SEEN:
+        _seen.clear()
+    return False
+
+
+# ── Filter logic ─────────────────────────────────────────────────────────────
+def passes_filter(text: str, config: dict) -> tuple[bool, str]:
+    """Returns (passed, reason) for logging."""
+    if not text or not text.strip():
+        return False, "empty message"
+
+    text_lower = text.lower()
+    keywords = config.get("keywords", {})
+
+    for kw in keywords.get("exclude", []):
+        if kw.lower() in text_lower:
+            return False, f"exclude keyword '{kw}'"
+
+    include_kws = keywords.get("include", [])
+    if include_kws:
+        matched_kw = next((kw for kw in include_kws if kw.lower() in text_lower), None)
+        if not matched_kw:
+            return False, "no include keyword matched"
+
+    if config.get("require_time", False):
+        time_regex = config.get("time_regex", "")
+        if time_regex and not re.search(time_regex, text, re.IGNORECASE):
+            return False, "no time found"
+
+    return True, "ok"
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+async def main():
+    config = load_config()
+
+    api_id = int(os.getenv("API_ID"))
+    api_hash = os.getenv("API_HASH")
+    phone = os.getenv("PHONE")
+    session_string = os.getenv("SESSION_STRING", "").strip()
+
+    # Convert numeric IDs to int so Telethon can resolve private groups correctly
+    source_chats = []
+    for c in os.getenv("SOURCE_CHATS", "").split(","):
+        c = c.strip()
+        try:
+            source_chats.append(int(c))
+        except ValueError:
+            source_chats.append(c)
+
+    target_raw = os.getenv("TARGET_CHAT", "").strip()
+    try:
+        target_chat = int(target_raw)
+    except ValueError:
+        target_chat = target_raw
+
+    # Use StringSession (for cloud) if available, otherwise use local file session
+    if session_string:
+        log.info("Using session string (cloud mode)")
+        session = StringSession(session_string)
+    else:
+        log.info("Using local session file")
+        session = "session"
+
+    client = TelegramClient(session, api_id, api_hash)
+    await client.start(phone=phone if not session_string else None)
+
+    # Populate Telethon's cache so private groups can be resolved by ID
+    await client.get_dialogs()
+
+    source_entities = [await client.get_entity(c) for c in source_chats]
+    log.info("Listening on %d source(s): %s", len(source_entities), ", ".join(str(c) for c in source_chats))
+    log.info("Forwarding matches to: %s", target_chat)
+
+    @client.on(events.NewMessage(chats=source_entities))
+    async def handler(event):
+        text = event.message.text or ""
+
+        if is_duplicate(text):
+            log.debug("SKIP [duplicate] %s", text[:60].replace("\n", " "))
+            return
+
+        passed, reason = passes_filter(text, config)
+        if not passed:
+            log.debug("SKIP [%s] %s", reason, text[:60].replace("\n", " "))
+            return
+
+        preview = text[:80].replace("\n", " ")
+        log.info("MATCH → forwarding: %s", preview)
+        try:
+            await client.forward_messages(target_chat, event.message)
+            log.info("FORWARDED ✓ %s", preview)
+        except FloodWaitError as e:
+            log.warning("Rate limited by Telegram — waiting %ds", e.seconds)
+            await asyncio.sleep(e.seconds)
+        except Exception as e:
+            log.error("FAILED to forward: %s", e)
+
+    await client.run_until_disconnected()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

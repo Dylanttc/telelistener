@@ -1,0 +1,17 @@
+services:
+  - type: worker
+    name: badminton-listener
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: SESSION_STRING
+        sync: false
+      - key: SOURCE_CHATS
+        sync: false
+      - key: TARGET_CHAT
+        sync: false
