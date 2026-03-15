@@ -114,7 +114,12 @@ async def main():
         session = "session"
 
     client = TelegramClient(session, api_id, api_hash)
-    await client.start(phone=phone if not session_string else None)
+    if session_string:
+        await client.connect()
+        if not await client.is_user_authorized():
+            raise ValueError("Session string is invalid or expired — regenerate it with generate_session.py")
+    else:
+        await client.start(phone=phone)
 
     # Populate Telethon's cache so private groups can be resolved by ID
     await client.get_dialogs()
