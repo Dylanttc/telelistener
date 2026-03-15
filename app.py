@@ -80,11 +80,6 @@ def passes_filter(text: str, config: dict) -> tuple[bool, str]:
 async def main():
     config = load_config()
 
-    # Debug: log which expected env vars are present (not their values)
-    expected = ["API_ID", "API_HASH", "SESSION_STRING", "SOURCE_CHATS", "TARGET_CHAT"]
-    for var in expected:
-        log.info("ENV CHECK: %s = %s", var, "SET" if os.getenv(var) else "MISSING")
-
     api_id = int(os.getenv("API_ID"))
     api_hash = os.getenv("API_HASH")
     phone = os.getenv("PHONE")
