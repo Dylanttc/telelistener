@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 import yaml
+import google.generativeai as genai
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError
@@ -69,7 +70,6 @@ def passes_filter(text: str, config: dict) -> tuple[bool, str]:
         if not matched_kw:
             return False, "no include keyword matched"
 
-    # Intent keywords — at least one must match (AND with venue keywords)
     intent_kws = config.get("intent_keywords", [])
     if intent_kws:
         matched_intent = next((kw for kw in intent_kws if kw.lower() in text_lower), None)
@@ -84,6 +84,38 @@ def passes_filter(text: str, config: dict) -> tuple[bool, str]:
     return True, "ok"
 
 
+# ── Gemini summarization ─────────────────────────────────────────────────────
+GEMINI_PROMPT = """You are extracting badminton court sale information from a Telegram message in a Singapore group.
+
+The message may contain two types of information:
+1. Courts being SOLD / let go / transferred — extract this
+2. Courts where the sender is LOOKING FOR players to join — ignore this completely
+
+Extract ONLY the courts being sold/transferred and return in this exact format:
+Date: <date, e.g. "Mon 24 Mar" or "Tomorrow (Tue 25 Mar)">
+Time: <start time> - <end time, e.g. "8PM - 10PM">
+Venue: <venue name>
+
+If multiple courts are being sold, repeat the Date/Time/Venue block for each.
+If you cannot confidently identify a court being sold, respond with exactly: UNCLEAR
+
+Message:
+{text}"""
+
+
+async def summarize_with_gemini(text: str, sender_name: str, model) -> str | None:
+    prompt = GEMINI_PROMPT.format(text=text)
+    try:
+        response = await asyncio.to_thread(model.generate_content, prompt)
+        result = response.text.strip()
+        if result == "UNCLEAR":
+            return None
+        return f"From: {sender_name}\n{result}"
+    except Exception as e:
+        log.warning("Gemini summarization failed: %s", e)
+        return None
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 async def main():
     config = load_config()
@@ -93,7 +125,15 @@ async def main():
     phone = os.getenv("PHONE")
     session_string = os.getenv("SESSION_STRING", "").strip()
 
-    # Convert numeric IDs to int so Telethon can resolve private groups correctly
+    gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    gemini_model = None
+    if gemini_api_key:
+        genai.configure(api_key=gemini_api_key)
+        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        log.info("Gemini summarization enabled")
+    else:
+        log.warning("GEMINI_API_KEY not set — summarization disabled")
+
     source_chats = []
     for c in os.getenv("SOURCE_CHATS", "").split(","):
         c = c.strip()
@@ -108,7 +148,6 @@ async def main():
     except ValueError:
         target_chat = target_raw
 
-    # Use StringSession (for cloud) if available, otherwise use local file session
     if session_string:
         log.info("Using session string (cloud mode)")
         session = StringSession(session_string)
@@ -124,7 +163,6 @@ async def main():
     else:
         await client.start(phone=phone)
 
-    # Populate Telethon's cache so private groups can be resolved by ID
     await client.get_dialogs()
 
     source_entities = [await client.get_entity(c) for c in source_chats]
@@ -144,11 +182,27 @@ async def main():
             log.info("SKIP [%s] %s", reason, text[:60].replace("\n", " "))
             return
 
+        sender = await event.get_sender()
+        if sender:
+            sender_name = " ".join(filter(None, [getattr(sender, "first_name", ""), getattr(sender, "last_name", "")]))
+            if not sender_name and getattr(sender, "username", None):
+                sender_name = f"@{sender.username}"
+        else:
+            sender_name = "Unknown"
+
         preview = text[:80].replace("\n", " ")
         log.info("MATCH → forwarding: %s", preview)
         try:
             await client.forward_messages(target_chat, event.message)
             log.info("FORWARDED ✓ %s", preview)
+
+            if gemini_model:
+                summary = await summarize_with_gemini(text, sender_name, gemini_model)
+                if summary:
+                    await client.send_message(target_chat, f"📋 Summary\n\n{summary}")
+                    log.info("SUMMARY sent for: %s", preview)
+                else:
+                    log.info("SUMMARY skipped (UNCLEAR): %s", preview)
         except FloodWaitError as e:
             log.warning("Rate limited by Telegram — waiting %ds", e.seconds)
             await asyncio.sleep(e.seconds)
