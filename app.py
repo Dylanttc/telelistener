@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 import yaml
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError
@@ -106,7 +106,7 @@ Message:
 async def summarize_with_gemini(text: str, sender_name: str, model) -> str | None:
     prompt = GEMINI_PROMPT.format(text=text)
     try:
-        response = await asyncio.to_thread(model.generate_content, prompt)
+        response = await asyncio.to_thread(model.models.generate_content, model="gemini-2.0-flash", contents=prompt)
         result = response.text.strip()
         if result == "UNCLEAR":
             return None
@@ -128,8 +128,7 @@ async def main():
     gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
     gemini_model = None
     if gemini_api_key:
-        genai.configure(api_key=gemini_api_key)
-        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        gemini_model = genai.Client(api_key=gemini_api_key)
         log.info("Gemini summarization enabled")
     else:
         log.warning("GEMINI_API_KEY not set — summarization disabled")
