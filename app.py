@@ -106,7 +106,7 @@ Message:
 async def summarize_with_gemini(text: str, sender_name: str, model) -> str | None:
     prompt = GEMINI_PROMPT.format(text=text)
     try:
-        response = await asyncio.to_thread(model.models.generate_content, model="gemini-2.0-flash", contents=prompt)
+        response = await asyncio.to_thread(model.models.generate_content, model="gemini-2.5-flash-lite", contents=prompt)
         result = response.text.strip()
         if result == "UNCLEAR":
             return None
