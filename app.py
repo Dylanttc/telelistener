@@ -110,7 +110,7 @@ async def summarize_with_gemini(text: str, sender_name: str, model) -> str | Non
         result = response.text.strip()
         if result == "UNCLEAR":
             return None
-        return f"From: {sender_name}\n{result}"
+        return f"{result}\nFrom: {sender_name}"
     except Exception as e:
         log.warning("Gemini summarization failed: %s", e)
         return None
