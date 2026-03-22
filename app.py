@@ -92,9 +92,9 @@ The message may contain two types of information:
 2. Courts where the sender is LOOKING FOR players to join — ignore this completely
 
 Extract ONLY the courts being sold/transferred and return in this exact format:
+Venue: <venue name>
 Date: <date, e.g. "Mon 24 Mar" or "Tomorrow (Tue 25 Mar)">
 Time: <start time> - <end time, e.g. "8PM - 10PM">
-Venue: <venue name>
 
 If multiple courts are being sold, repeat the Date/Time/Venue block for each.
 If you cannot confidently identify a court being sold, respond with exactly: UNCLEAR
@@ -198,7 +198,7 @@ async def main():
             if gemini_model:
                 summary = await summarize_with_gemini(text, sender_name, gemini_model)
                 if summary:
-                    await client.send_message(target_chat, f"📋 Summary\n\n{summary}")
+                    await client.send_message(target_chat, summary)
                     log.info("SUMMARY sent for: %s", preview)
                 else:
                     log.info("SUMMARY skipped (UNCLEAR): %s", preview)
