@@ -262,11 +262,15 @@ async def main():
 
     await client.get_dialogs()
 
+    me = await client.get_me()
+    bot_username = (me.username or "").lower()
+    log.info("Logged in as: @%s (id=%s)", bot_username, me.id)
+
     source_entities = [await client.get_entity(c) for c in source_chats]
     target_entity = await client.get_entity(target_chat)
     log.info("Listening on %d source(s): %s", len(source_entities), ", ".join(str(c) for c in source_chats))
     log.info("Forwarding matches to: %s", target_chat)
-    log.info("Listening for booking confirmations in: %s", target_chat)
+    log.info("Listening for calendar commands in: %s", target_chat)
 
     @client.on(events.NewMessage(chats=source_entities))
     async def handler(event):
