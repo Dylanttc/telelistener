@@ -89,8 +89,8 @@ Venue: <venue name>
 Date: <date, e.g. "Mon 24 Mar" or "Tomorrow (Tue 25 Mar)">
 Time: <start time> - <end time, e.g. "8PM - 10PM">
 
-If multiple courts are being sold, repeat the Venue/Date/Time block for each.
-If you cannot confidently identify a court being sold, respond with exactly: UNCLEAR
+If multiple courts at the listed venues are being sold, repeat the Venue/Date/Time block for each.
+If you cannot confidently identify a court being sold at the listed venues, respond with exactly: UNCLEAR
 
 Message:
 {text}"""
@@ -264,7 +264,8 @@ async def main():
             await client.forward_messages(target_chat, event.message)
             log.info("FORWARDED v %s", preview)
             if gemini_model:
-                summary = await summarize_with_gemini(text, sender_name, gemini_model)
+                include_kws = config.get("keywords", {}).get("include", [])
+                summary = await summarize_with_gemini(text, sender_name, gemini_model, include_kws)
                 if summary:
                     await client.send_message(target_chat, summary)
                     log.info("SUMMARY sent for: %s", preview)
