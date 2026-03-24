@@ -3,3 +3,6 @@ python-dotenv==1.0.1
 PyYAML==6.0.2
 rapidfuzz==3.9.6
 google-genai
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
