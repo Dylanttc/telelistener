@@ -78,15 +78,21 @@ def passes_filter(text: str, config: dict) -> tuple[bool, str]:
     return True, "ok"
 
 
-GEMINI_PROMPT = """You are extracting badminton court sale information from a Telegram message in a Singapore group.
+GEMINI_PROMPT = """\
+You are extracting badminton court sale information from a Telegram message in a Singapore group.
 
-The message may contain two types of information:
-1. Courts being SOLD / let go / transferred - extract this
-2. Courts where the sender is LOOKING FOR players to join - ignore this completely
+You are ONLY interested in courts at these specific venues: {venues}
 
-Extract ONLY the courts being sold/transferred and return in this exact format:
+Today's date is {today}.
+
+The message may contain multiple types of information. Your rules:
+1. Courts being SOLD / let go / transferred AT ONE OF THE LISTED VENUES ABOVE — extract this
+2. Courts at venues NOT in the list above — ignore completely
+3. Courts where the sender is LOOKING FOR players to join — ignore completely
+
+Extract ONLY the courts being sold/transferred at the listed venues and return in this exact format:
 Venue: <venue name>
-Date: <date, e.g. "Mon 24 Mar" or "Tomorrow (Tue 25 Mar)">
+Date: <date as DD Mon YYYY, e.g. "24 Mar 2026">
 Time: <start time> - <end time, e.g. "8PM - 10PM">
 
 If multiple courts at the listed venues are being sold, repeat the Venue/Date/Time block for each.
@@ -96,8 +102,23 @@ Message:
 {text}"""
 
 
-async def summarize_with_gemini(text: str, sender_name: str, model) -> str | None:
-    prompt = GEMINI_PROMPT.format(text=text)
+def add_day_to_dates(summary: str) -> str:
+    """Parse Date: lines from Gemini output and prepend the correct weekday using Python datetime."""
+    def replace_date(match):
+        date_str = match.group(1).strip()
+        try:
+            dt = datetime.strptime(date_str, "%d %b %Y")
+            return "Date: " + dt.strftime("%a %d %b")
+        except ValueError:
+            return match.group(0)
+    return re.sub(r"^Date: (.+)$", replace_date, summary, flags=re.MULTILINE)
+
+
+async def summarize_with_gemini(text: str, sender_name: str, model, venues: list[str]) -> str | None:
+    """Returns a formatted summary string, or None if extraction failed."""
+    venues_str = ", ".join(venues) if venues else "any venue"
+    today = datetime.now().strftime("%A, %d %B %Y")
+    prompt = GEMINI_PROMPT.format(venues=venues_str, today=today, text=text)
     try:
         response = await asyncio.to_thread(
             model.models.generate_content,
@@ -107,7 +128,9 @@ async def summarize_with_gemini(text: str, sender_name: str, model) -> str | Non
         result = response.text.strip()
         if result == "UNCLEAR":
             return None
-        return f"{result}\nFrom: {sender_name}"
+        result = add_day_to_dates(result)
+        return f"{result}
+From: {sender_name}"
     except Exception as e:
         log.warning("Gemini summarization failed: %s", e)
         return None
