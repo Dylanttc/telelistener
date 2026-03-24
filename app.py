@@ -38,6 +38,11 @@ def load_config() -> dict:
 _seen: set[str] = set()
 _MAX_SEEN = 500
 
+# ── Pending calendar operations (confirmation flow) ─────────────────
+# {chat_id: {"action": "delete"|"change", "event_id": str, "event_summary": str,
+#             "updated": dict|None, "updated_summary": str|None}}
+_pending_ops: dict = {}
+
 
 def _hash(text: str) -> str:
     return hashlib.md5(text.strip().lower().encode()).hexdigest()
