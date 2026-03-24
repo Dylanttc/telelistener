@@ -287,7 +287,7 @@ async def parse_change_command(text: str, model) -> dict | None:
 
 
 # ── Google Calendar ───────────────────────────────────────────────────────────
-CALENDAR_ATTENDEES = ["dylanttc95@gmail.com"]
+CALENDAR_ATTENDEES = ["dylanttc95@gmail.com", "goweiwen@gmail.com", "ongkc95@gmail.com"]
 
 
 def get_calendar_service():
