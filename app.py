@@ -129,8 +129,7 @@ async def summarize_with_gemini(text: str, sender_name: str, model, venues: list
         if result == "UNCLEAR":
             return None
         result = add_day_to_dates(result)
-        return f"{result}
-From: {sender_name}"
+        return f"{result}\nFrom: {sender_name}"
     except Exception as e:
         log.warning("Gemini summarization failed: %s", e)
         return None
