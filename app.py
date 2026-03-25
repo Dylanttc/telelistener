@@ -145,7 +145,7 @@ async def _summarize_with_groq(prompt: str, sender_name: str, groq_client) -> st
     try:
         response = await asyncio.to_thread(
             lambda: groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
             )
@@ -161,37 +161,43 @@ async def _summarize_with_groq(prompt: str, sender_name: str, groq_client) -> st
         return None
 
 
-async def summarize_with_gemini(text: str, sender_name: str, model, venues: list[str], groq_client=None) -> str | None:
-    """Returns a formatted summary string, or None if extraction failed.
-    Retries once after 2s on 503, then falls back to Groq if available."""
+async def summarize_with_gemini(text: str, sender_name: str, models: list, venues: list[str], groq_client=None) -> str | None:
+    """Try each Gemini key in order (retrying once on 503), then fall back to Groq."""
     venues_str = ", ".join(venues) if venues else "any venue"
     today = datetime.now().strftime("%A, %d %B %Y")
     prompt = GEMINI_PROMPT.format(venues=venues_str, today=today, text=text)
 
-    for attempt in range(2):
-        try:
-            response = await asyncio.to_thread(
-                model.models.generate_content,
-                model="gemini-2.0-flash",
-                contents=prompt
-            )
-            result = response.text.strip()
-            if any(line.strip() == "UNCLEAR" for line in result.splitlines()):
-                return None
-            result = add_day_to_dates(result)
-            return f"{result}\nFrom: {sender_name}"
-        except Exception as e:
-            is_503 = "503" in str(e) or "UNAVAILABLE" in str(e)
-            if is_503 and attempt == 0:
-                log.warning("Gemini 503 — retrying in 2s...")
-                await asyncio.sleep(2)
-                continue
-            log.warning("Gemini summarization failed (attempt %d): %s", attempt + 1, e)
-            break
+    for key_num, model in enumerate(models, start=1):
+        for attempt in range(2):
+            try:
+                response = await asyncio.to_thread(
+                    model.models.generate_content,
+                    model="gemini-2.5-flash-lite",
+                    contents=prompt
+                )
+                result = response.text.strip()
+                if any(line.strip() == "UNCLEAR" for line in result.splitlines()):
+                    return None
+                result = add_day_to_dates(result)
+                if key_num > 1:
+                    log.info("Gemini key %d succeeded", key_num)
+                return f"{result}\nFrom: {sender_name}"
+            except Exception as e:
+                is_503 = "503" in str(e) or "UNAVAILABLE" in str(e)
+                is_quota = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
+                if is_503 and attempt == 0:
+                    log.warning("Gemini key %d: 503 — retrying in 2s...", key_num)
+                    await asyncio.sleep(2)
+                    continue
+                if is_quota:
+                    log.warning("Gemini key %d quota exhausted — trying next key...", key_num)
+                else:
+                    log.warning("Gemini key %d failed: %s", key_num, e)
+                break  # move on to next key
 
-    # Gemini failed both attempts — try Groq if configured
+    # All Gemini keys exhausted — try Groq
     if groq_client:
-        log.info("Falling back to Groq...")
+        log.info("All Gemini keys failed — falling back to Groq...")
         return await _summarize_with_groq(prompt, sender_name, groq_client)
 
     return None
@@ -461,13 +467,16 @@ async def main():
     phone = os.getenv("PHONE")
     session_string = os.getenv("SESSION_STRING", "").strip()
 
-    gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    gemini_model = None
-    if gemini_api_key:
-        gemini_model = genai.Client(api_key=gemini_api_key)
-        log.info("Gemini enabled")
-    else:
-        log.warning("GEMINI_API_KEY not set — Gemini disabled")
+    gemini_models = []
+    for i, key_env in enumerate(("GEMINI_API_KEY", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"), start=1):
+        key = os.getenv(key_env, "").strip()
+        if key:
+            gemini_models.append(genai.Client(api_key=key))
+            log.info("Gemini key %d enabled (%s)", i, key_env)
+    if not gemini_models:
+        log.warning("No Gemini API keys set — Gemini disabled")
+    # Keep a reference to the primary model for booking/delete/change parsers
+    gemini_model = gemini_models[0] if gemini_models else None
 
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
     groq_client = None
@@ -562,7 +571,7 @@ async def main():
             # Send summary to target group
             if gemini_model:
                 include_kws = config.get("keywords", {}).get("include", [])
-                summary = await summarize_with_gemini(text, sender_name, gemini_model, include_kws, groq_client=groq_client)
+                summary = await summarize_with_gemini(text, sender_name, gemini_models, include_kws, groq_client=groq_client)
                 if summary:
                     await client.send_message(target_chat, summary)
                     log.info("SUMMARY sent for: %s", preview)
