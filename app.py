@@ -131,25 +131,61 @@ def add_day_to_dates(summary: str) -> str:
     return re.sub(r"^Date: (.+)$", replace_date, summary, flags=re.MULTILINE)
 
 
-async def summarize_with_gemini(text: str, sender_name: str, model, venues: list[str]) -> str | None:
-    """Returns a formatted summary string, or None if extraction failed."""
-    venues_str = ", ".join(venues) if venues else "any venue"
-    today = datetime.now().strftime("%A, %d %B %Y")
-    prompt = GEMINI_PROMPT.format(venues=venues_str, today=today, text=text)
+async def _summarize_with_groq(prompt: str, sender_name: str, groq_client) -> str | None:
+    """Fallback summarization using Groq (llama-3.1-8b-instant)."""
     try:
         response = await asyncio.to_thread(
-            model.models.generate_content,
-            model="gemini-2.5-flash-lite",
-            contents=prompt
+            lambda: groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+            )
         )
-        result = response.text.strip()
+        result = response.choices[0].message.content.strip()
         if result == "UNCLEAR":
             return None
         result = add_day_to_dates(result)
+        log.info("Groq fallback succeeded")
         return f"{result}\nFrom: {sender_name}"
     except Exception as e:
-        log.warning("Gemini summarization failed: %s", e)
+        log.warning("Groq fallback failed: %s", e)
         return None
+
+
+async def summarize_with_gemini(text: str, sender_name: str, model, venues: list[str], groq_client=None) -> str | None:
+    """Returns a formatted summary string, or None if extraction failed.
+    Retries once after 2s on 503, then falls back to Groq if available."""
+    venues_str = ", ".join(venues) if venues else "any venue"
+    today = datetime.now().strftime("%A, %d %B %Y")
+    prompt = GEMINI_PROMPT.format(venues=venues_str, today=today, text=text)
+
+    for attempt in range(2):
+        try:
+            response = await asyncio.to_thread(
+                model.models.generate_content,
+                model="gemini-2.5-flash-lite",
+                contents=prompt
+            )
+            result = response.text.strip()
+            if result == "UNCLEAR":
+                return None
+            result = add_day_to_dates(result)
+            return f"{result}\nFrom: {sender_name}"
+        except Exception as e:
+            is_503 = "503" in str(e) or "UNAVAILABLE" in str(e)
+            if is_503 and attempt == 0:
+                log.warning("Gemini 503 — retrying in 2s...")
+                await asyncio.sleep(2)
+                continue
+            log.warning("Gemini summarization failed (attempt %d): %s", attempt + 1, e)
+            break
+
+    # Gemini failed both attempts — try Groq if configured
+    if groq_client:
+        log.info("Falling back to Groq...")
+        return await _summarize_with_groq(prompt, sender_name, groq_client)
+
+    return None
 
 
 # ── Gemini booking parser ─────────────────────────────────────────────────────
@@ -415,6 +451,15 @@ async def main():
     else:
         log.warning("GEMINI_API_KEY not set — Gemini disabled")
 
+    groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
+    groq_client = None
+    if groq_api_key:
+        from groq import Groq
+        groq_client = Groq(api_key=groq_api_key)
+        log.info("Groq fallback enabled")
+    else:
+        log.info("GROQ_API_KEY not set — Groq fallback disabled")
+
     # Convert numeric IDs to int so Telethon can resolve private groups correctly
     source_chats = []
     for c in os.getenv("SOURCE_CHATS", "").split(","):
@@ -487,7 +532,7 @@ async def main():
 
             if gemini_model:
                 include_kws = config.get("keywords", {}).get("include", [])
-                summary = await summarize_with_gemini(text, sender_name, gemini_model, include_kws)
+                summary = await summarize_with_gemini(text, sender_name, gemini_model, include_kws, groq_client=groq_client)
                 if summary:
                     await client.send_message(target_chat, summary)
                     log.info("SUMMARY sent for: %s", preview)
