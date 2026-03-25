@@ -1,3 +1,14 @@
+# Emails to invite when a calendar event is created
+calendar_attendees:
+  - REDACTED
+  - REDACTED
+  - REDACTED
+  - REDACTED
+  - REDACTED
+  - REDACTED
+  - REDACTED
+  - REDACTED
+
 keywords:
   # Messages must contain at least one of these to be forwarded
   include:
