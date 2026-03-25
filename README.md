@@ -10,6 +10,10 @@ Badminton courts in Singapore are notoriously difficult to book. Demand far outs
 
 The resale supply is actually plentiful — but these groups receive **hundreds of messages daily**, a noisy mix of courts for sale, players recruiting others to join their sessions, questions, and general chatter. Nobody has the capacity to manually monitor this firehose of messages around the clock, which means good courts at good venues get snapped up before most people even see them.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/f70d8392-069f-4e43-8b42-346146dd2ec2" width="650">
+</p>
+
 This bot solves that by acting as an always-on personal assistant: it watches the groups 24/7, filters for exactly what matters, and delivers clean summaries to a private Telegram group — with zero manual effort.
 
 ---
@@ -25,6 +29,10 @@ Every incoming message is checked against a configurable ruleset (`config.yml`):
 
 Messages that pass are forwarded as-is to a private **archive group** for reference.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/da0ca25a-ed40-4b6d-876b-38f896466cf9" width="380">
+</p>
+
 ### 2 — Summarises with AI
 For each matched message, the bot calls Gemini AI to extract only the relevant court sale details — correctly ignoring player-seeking sections and non-listed venues even within the same message. The clean summary is sent to a private **target group**:
 
@@ -35,11 +43,20 @@ Time: 7:30PM - 9:30PM
 From: John Tan
 ```
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/36a712f9-7fe7-4488-8e28-fa272bbbc32b" width="650">
+</p>
+
 ### 3 — Manages Google Calendar via Telegram
 When a court is purchased, Dylan sends a confirmation message in the target group. The bot detects this and:
 - **Creates** a Google Calendar event (with title, date, start/end time)
 - **Invites** a fixed list of attendees via email (with notifications)
 - Supports **editing** and **deleting** events via natural language commands, with a 2-step confirmation flow for safety
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/58e86d08-91fb-47ab-aa8b-dbbed623ab4d" width="650">
+  <img src="https://github.com/user-attachments/assets/af710eef-3bab-4f86-b03c-8e6fdb129dbf" width="300">
+</p>
 
 ---
 
