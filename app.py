@@ -102,18 +102,27 @@ You are ONLY interested in courts at these specific venues: {venues}
 
 Today's date is {today}.
 
-The message may contain multiple types of information. Your rules:
-1. Courts being SOLD / let go / transferred AT ONE OF THE LISTED VENUES ABOVE — extract this
-2. Courts at venues NOT in the list above — ignore completely
-3. Courts where the sender is LOOKING FOR players to join — ignore completely
+The message may contain multiple types of information. Apply these rules strictly:
 
-Extract ONLY the courts being sold/transferred at the listed venues and return in this exact format:
+EXTRACT only if ALL of the following are true:
+- A court is being SOLD / let go / transferred / giving away
+- The court is at one of the listed venues above
+
+IGNORE completely if ANY of the following apply:
+- The venue is NOT in the listed venues above
+- The sender is LOOKING FOR players / HB / people to join them
+  (warning signals: "looking for", "LF", "need HB", "need players", "anyone join", "join us", "🔥 looking for X players", "$X/pax")
+- The court is already sold / reserved / taken
+
+For MIXED messages (part selling, part looking for players): extract ONLY the selling parts at listed venues. If no selling parts at listed venues exist, respond with UNCLEAR.
+
+Return extracted courts in this exact format:
 Venue: <venue name>
 Date: <date as DD Mon YYYY, e.g. "24 Mar 2026">
 Time: <start time> - <end time, e.g. "8PM - 10PM">
 
-If multiple courts at the listed venues are being sold, repeat the Venue/Date/Time block for each.
-If you cannot confidently identify a court being sold at the listed venues, respond with exactly: UNCLEAR
+If multiple courts at listed venues are being sold, repeat the block for each.
+If no courts qualify, respond with exactly: UNCLEAR
 
 Message:
 {text}"""
@@ -142,7 +151,7 @@ async def _summarize_with_groq(prompt: str, sender_name: str, groq_client) -> st
             )
         )
         result = response.choices[0].message.content.strip()
-        if result == "UNCLEAR":
+        if any(line.strip() == "UNCLEAR" for line in result.splitlines()):
             return None
         result = add_day_to_dates(result)
         log.info("Groq fallback succeeded")
@@ -163,11 +172,11 @@ async def summarize_with_gemini(text: str, sender_name: str, model, venues: list
         try:
             response = await asyncio.to_thread(
                 model.models.generate_content,
-                model="gemini-2.5-flash-lite",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             result = response.text.strip()
-            if result == "UNCLEAR":
+            if any(line.strip() == "UNCLEAR" for line in result.splitlines()):
                 return None
             result = add_day_to_dates(result)
             return f"{result}\nFrom: {sender_name}"
