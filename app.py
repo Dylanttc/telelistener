@@ -323,7 +323,14 @@ async def parse_change_command(text: str, model) -> dict | None:
 
 
 # ── Google Calendar ───────────────────────────────────────────────────────────
-CALENDAR_ATTENDEES = ["REDACTED", "REDACTED", "REDACTED"]
+CALENDAR_ATTENDEES = ["REDACTED",
+    "REDACTED",
+    "REDACTED",
+    "REDACTED",
+    "REDACTED",
+    "REDACTED",
+    "REDACTED",
+    "REDACTED"]
 
 
 def get_calendar_service():
