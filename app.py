@@ -323,14 +323,16 @@ async def parse_change_command(text: str, model) -> dict | None:
 
 
 # ── Google Calendar ───────────────────────────────────────────────────────────
-CALENDAR_ATTENDEES = ["dylanttc95@gmail.com",
+CALENDAR_ATTENDEES = [
+    "dylanttc95@gmail.com",
     "goweiwen@gmail.com",
     "ongkc95@gmail.com",
     "raynold.ng24@gmail.com",
     "hello@genistaln.co",
     "manfred.jx@gmail.com",
     "tanchc1611@gmail.com",
-    "markarb@hotmail.com"]
+    "markarb@hotmail.com",
+]
 
 
 def get_calendar_service():
@@ -482,6 +484,14 @@ async def main():
     except ValueError:
         target_chat = target_raw
 
+    archive_raw = os.getenv("ARCHIVE_CHAT", "").strip()
+    archive_chat = None
+    if archive_raw:
+        try:
+            archive_chat = int(archive_raw)
+        except ValueError:
+            archive_chat = archive_raw
+
     if session_string:
         log.info("Using session string (cloud mode)")
         session = StringSession(session_string)
@@ -506,7 +516,8 @@ async def main():
     source_entities = [await client.get_entity(c) for c in source_chats]
     target_entity = await client.get_entity(target_chat)
     log.info("Listening on %d source(s): %s", len(source_entities), ", ".join(str(c) for c in source_chats))
-    log.info("Forwarding matches to: %s", target_chat)
+    log.info("Forwarding summaries to: %s", target_chat)
+    log.info("Archiving originals to: %s", archive_chat or "Disabled (ARCHIVE_CHAT not set)")
     log.info("Listening for calendar commands in: %s", target_chat)
 
     # ── Court sale forwarder ──────────────────────────────────────────────────
@@ -534,9 +545,12 @@ async def main():
         preview = text[:80].replace("\n", " ")
         log.info("MATCH → forwarding: %s", preview)
         try:
-            await client.forward_messages(target_chat, event.message)
-            log.info("FORWARDED ✓ %s", preview)
+            # Archive original message (if ARCHIVE_CHAT is configured)
+            if archive_chat:
+                await client.forward_messages(archive_chat, event.message)
+                log.info("ARCHIVED ✓ %s", preview)
 
+            # Send summary to target group
             if gemini_model:
                 include_kws = config.get("keywords", {}).get("include", [])
                 summary = await summarize_with_gemini(text, sender_name, gemini_model, include_kws, groq_client=groq_client)
