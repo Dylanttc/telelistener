@@ -1,3 +1,14 @@
+# Emails to invite when a calendar event is created
+calendar_attendees:
+  - dylanttc95@gmail.com
+  - goweiwen@gmail.com
+  - ongkc95@gmail.com
+  - raynold.ng24@gmail.com
+  - hello@genistaln.co
+  - manfred.jx@gmail.com
+  - tanchc1611@gmail.com
+  - markarb@hotmail.com
+
 keywords:
   # Messages must contain at least one of these to be forwarded
   include:

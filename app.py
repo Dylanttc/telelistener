@@ -338,16 +338,6 @@ async def parse_change_command(text: str, model) -> dict | None:
 
 
 # ── Google Calendar ───────────────────────────────────────────────────────────
-CALENDAR_ATTENDEES = [
-    "dylanttc95@gmail.com",
-    "goweiwen@gmail.com",
-    "ongkc95@gmail.com",
-    "raynold.ng24@gmail.com",
-    "hello@genistaln.co",
-    "manfred.jx@gmail.com",
-    "tanchc1611@gmail.com",
-    "markarb@hotmail.com",
-]
 
 
 def get_calendar_service():
@@ -424,7 +414,7 @@ async def delete_calendar_event(service, event_id: str) -> bool:
     return True
 
 
-async def create_calendar_event(parsed: dict) -> bool:
+async def create_calendar_event(parsed: dict, attendees: list[str]) -> bool:
     venue = parsed["venue"]
     date = parsed["date"]
     start_time = parsed["start_time"]
@@ -443,7 +433,7 @@ async def create_calendar_event(parsed: dict) -> bool:
             "dateTime": f"{date}T{end_time}:00+08:00",
             "timeZone": "Asia/Singapore",
         },
-        "attendees": [{"email": e} for e in CALENDAR_ATTENDEES],
+        "attendees": [{"email": e} for e in attendees],
     }
 
     service = await asyncio.to_thread(get_calendar_service)
@@ -647,7 +637,8 @@ async def main():
                 log.warning("Could not parse booking from: %s", text[:60])
                 return
             try:
-                await create_calendar_event(parsed)
+                attendees = config.get("calendar_attendees", [])
+                await create_calendar_event(parsed, attendees)
                 await event.reply("Okay, I've created a Google Calendar event.")
                 log.info("Calendar event created and confirmation sent")
             except Exception as e:

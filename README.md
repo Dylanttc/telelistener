@@ -119,9 +119,14 @@ Matched messages go to two separate places:
 
 ## Configuration
 
-All filter keywords live in [`config.yml`](config.yml) — no code changes needed:
+All configuration lives in [`config.yml`](config.yml) — no code changes needed:
 
 ```yaml
+calendar_attendees:   # emails invited when a calendar event is created
+  - dylanttc95@gmail.com
+  - goweiwen@gmail.com
+  # ...
+
 keywords:
   include:       # venue keywords (at least one must match)
     - "teck ghee"
