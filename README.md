@@ -1,84 +1,191 @@
-# Tele Listener — Badminton Court Forwarder
+# Telelistener 🏸
 
-A Telegram bot that monitors Singapore badminton groups and automatically forwards court sale listings to a private group, filtered by venue and selling intent. Matched messages are summarized by Gemini AI into a clean, scannable format.
+A personal automation bot that monitors Singapore badminton Telegram groups 24/7, filters out the noise, summarises court sale listings using AI, and automatically creates Google Calendar events when a court is purchased.
 
-## What it does
+---
 
-Singapore badminton groups like @sgbadmintontelecom are flooded with hundreds of messages daily. This bot listens to those groups and only forwards messages that:
+## The Problem
 
-1. Mention a venue you care about (e.g. Bishan, Teck Ghee, Yio Chu Kang)
-2. Are selling or swapping a court (not just looking for players)
-3. Contain a time slot (so vague posts are filtered out)
+Badminton courts in Singapore are notoriously difficult to book. Demand far outstrips supply — community centres and school halls are perpetually full, and official booking systems are fiercely competitive. The practical workaround most players rely on is the **resale market**: people who can no longer make their sessions sell their pre-booked courts at cost price via Telegram groups like [@sgbadmintontelecom](https://t.me/sgbadmintontelecom).
 
-For each matched message, the bot:
-- Forwards the original message to your private group
-- Sends a Gemini AI summary immediately after, extracting only the court sale details and ignoring any player-seeking parts:
+The resale supply is actually plentiful — but these groups receive **hundreds of messages daily**, a noisy mix of courts for sale, players recruiting others to join their sessions, questions, and general chatter. Nobody has the capacity to manually monitor this firehose of messages around the clock, which means good courts at good venues get snapped up before most people even see them.
 
-    Venue: Teck Ghee
-    Date: Sun 22 Mar
-    Time: 7PM - 9PM
-    From: John Tan
+This bot solves that by acting as an always-on personal assistant: it watches the groups 24/7, filters for exactly what matters, and delivers clean summaries to a private Telegram group — with zero manual effort.
 
-## Current keywords
+---
 
-View and suggest changes: config.yml
+## What It Does
 
-Venues listened to: Deyi, Teck Ghee, Mayflower, Ang Mo Kio, Bishan, Yio Chu Kang, Peirce, Eunoia, Marymount, Serangoon, Thomson, Jing Shan, Townsville, Whitley, Zhonghua, Peicai, Kuo Chuan, Bowen, Beatty
+### 1 — Filters & Archives
+Every incoming message is checked against a configurable ruleset (`config.yml`):
+- ✅ Must mention a **venue** Dylan cares about (e.g. Teck Ghee, Bishan, Yio Chu Kang)
+- ✅ Must contain a **selling-intent keyword** (e.g. "letting go", "transfer", "sale")
+- ✅ Must mention a **time slot** (e.g. "7pm", "19:00")
+- ❌ Must not contain **exclusion keywords** (e.g. "sold", "reserved", "taken")
 
-Selling intent keywords: sale, sell, selling, letting go, let go, swap, give away, transfer
+Messages that pass are forwarded as-is to a private **archive group** for reference.
 
-Excluded keywords: sold, reserved, taken
+### 2 — Summarises with AI
+For each matched message, the bot calls Gemini AI to extract only the relevant court sale details — correctly ignoring player-seeking sections and non-listed venues even within the same message. The clean summary is sent to a private **target group**:
 
-## Project structure
+```
+Venue: Teck Ghee CC
+Date: Sat 29 Mar
+Time: 7:30PM - 9:30PM
+From: John Tan
+```
 
-- app.py — Main bot logic
-- config.yml — Keywords and filter rules (edit this to change behaviour)
-- requirements.txt — Python dependencies
-- generate_session.py — One-time script to generate a session string for cloud deployment
-- Dockerfile — Container config for Fly.io
-- fly.toml — Fly.io deployment config (Singapore region)
+### 3 — Manages Google Calendar via Telegram
+When a court is purchased, Dylan sends a confirmation message in the target group. The bot detects this and:
+- **Creates** a Google Calendar event (with title, date, start/end time)
+- **Invites** a fixed list of attendees via email (with notifications)
+- Supports **editing** and **deleting** events via natural language commands, with a 2-step confirmation flow for safety
 
-## Setup (local)
+---
 
-Prerequisites:
-- Python 3.12+
-- A spare Telegram account (not your main one)
-- Telegram API credentials from my.telegram.org
-- A Gemini API key from aistudio.google.com (free, no billing required)
+## Architecture
 
-Installation:
-1. pip install -r requirements.txt
-2. cp .env.example .env
-3. Edit .env with your credentials (API_ID, API_HASH, PHONE, SOURCE_CHATS, TARGET_CHAT, GEMINI_API_KEY)
+```
+[Source group: @sgbadmintontelecom]  ──┐
+                                       ├──▶  Bot filters & deduplicates
+[Source group: test group]           ──┘           │              │
+                                                   │              │
+                                          [Archive group]   [Target group]
+                                          original msgs     AI summaries only
+                                                                   │
+                                               Dylan: "@bot confirmed
+                                                Teck Ghee 29 Mar 7-9pm"
+                                                                   │
+                                               Google Calendar event created
+                                               + attendees invited via email
+```
 
-Run: py app.py
+---
 
-On first run you will be asked for a Telegram OTP. After that, login is cached automatically.
+## Key Engineering Details
 
-## Deployment (Fly.io)
+### Userbot, not a bot account
+Telegram bots cannot join or read large public groups unprompted. This project uses a **Telethon userbot** — running on a real Telegram user account — which can listen to any group the account is a member of, including 16,000-member public groups.
 
-The bot runs 24/7 on Fly.io in the Singapore region.
-Deploy from the Codespace terminal (corporate security blocks git push and flyctl from local machine).
+### Resilient AI pipeline
+Gemini's free tier has daily quota limits, so the summarisation pipeline rotates through **3 Gemini API keys** before giving up. Each key gets a retry on transient 503 errors, and quota exhaustion (429) immediately skips to the next key. If all Gemini keys fail, the bot falls back to **Groq (llama-3.3-70b-versatile)**.
 
-Deploy after code changes: fly deploy
-View live logs: fly logs
-Update a secret: fly secrets set GEMINI_API_KEY=...
+```
+Gemini key 1 → Gemini key 2 → Gemini key 3 → Groq → skip summary
+```
 
-## Updating keywords
+### Duplicate suppression
+Messages are hashed (MD5) and checked against a rolling in-memory set before processing — preventing the same listing from being forwarded twice if it appears in multiple groups or gets re-posted.
 
-Edit config.yml, then from the Codespace terminal:
-  git add config.yml
-  git commit -m "Update keywords"
-  git push
-  fly deploy
+### Safety-first calendar edits
+Calendar delete and change commands require a **2-step confirmation** (`@bot delete ...` → bot shows what it found → `@bot confirm delete`). The bot also only touches events whose title ends with "Badminton", ensuring it can never accidentally modify unrelated calendar entries.
 
-## How the filter works
+### Dual-group output
+Matched messages go to two separate places:
+- **Archive group** — the raw original message, for cross-referencing
+- **Target group** — the clean AI summary only, for a noise-free experience
 
-A message is forwarded only if it passes all of these checks in order:
+---
 
-1. Not a duplicate of a recently seen message
-2. Does not contain any exclude keyword (sold, reserved, taken)
-3. Contains at least one venue keyword (Bishan, Teck Ghee, etc.)
-4. Contains at least one selling intent keyword (selling, let go, swap, etc.)
-5. Contains a recognisable time slot (e.g. 7pm, 19:00)
-6. Gemini AI extracts the court sale details and sends a summary — if Gemini cannot confidently extract the info, only the original message is forwarded
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Telegram client | [Telethon](https://github.com/LonamiWebs/Telethon) (userbot) |
+| AI summarisation | Gemini 2.5-flash-lite (3 keys) + Groq fallback |
+| Calendar | Google Calendar API (OAuth2) |
+| Hosting | [Fly.io](https://fly.io) — Singapore region (`sin`), 24/7 |
+| Configuration | YAML (`config.yml`) — no code changes needed for keyword updates |
+| Language | Python 3.11 (fully async via `asyncio`) |
+
+---
+
+## Configuration
+
+All filter keywords live in [`config.yml`](config.yml) — no code changes needed:
+
+```yaml
+keywords:
+  include:       # venue keywords (at least one must match)
+    - "teck ghee"
+    - "bishan"
+    - "yio chu kang"
+    # ...
+
+  exclude:       # message is dropped if any of these appear
+    - "sold"
+    - "reserved"
+
+intent_keywords: # selling-intent (at least one must match)
+  - "letting go"
+  - "transfer"
+  - "sale"
+  # ...
+
+require_time: true   # message must also contain a time slot
+```
+
+---
+
+## Environment Variables
+
+Stored as [Fly.io secrets](https://fly.io/docs/apps/secrets/) in production. For local development, copy `.env.example` to `.env`.
+
+| Variable | Description |
+|---|---|
+| `API_ID` | Telegram API ID from [my.telegram.org](https://my.telegram.org) |
+| `API_HASH` | Telegram API hash |
+| `PHONE` | Phone number of the Telegram account |
+| `SESSION_STRING` | Serialised Telethon session for cloud deployment |
+| `SOURCE_CHATS` | Comma-separated source group IDs/usernames |
+| `TARGET_CHAT` | Private group for AI summaries |
+| `ARCHIVE_CHAT` | Group for original forwarded messages |
+| `GEMINI_API_KEY` | Primary Gemini key ([aistudio.google.com](https://aistudio.google.com)) |
+| `GEMINI_API_KEY_2` | Secondary Gemini key (fallback) |
+| `GEMINI_API_KEY_3` | Tertiary Gemini key (fallback) |
+| `GROQ_API_KEY` | Groq key ([console.groq.com](https://console.groq.com)) — last resort fallback |
+| `GOOGLE_TOKEN` | Serialised Google OAuth2 token for Calendar API |
+
+---
+
+## Project Structure
+
+```
+├── app.py               # Main bot logic — filtering, AI summarisation, calendar management
+├── config.yml           # All keywords and filter rules
+├── requirements.txt     # Python dependencies
+├── Dockerfile           # Container definition for Fly.io
+├── fly.toml             # Fly.io app config (app: badminton-listener, region: sin)
+├── generate_session.py  # One-time script to generate a Telethon session string
+└── .env.example         # Template for local environment variables
+```
+
+---
+
+## Deployment
+
+The bot runs on Fly.io. From the project root:
+
+```bash
+# Deploy latest code
+fly deploy
+
+# View live logs
+fly logs
+
+# Update a secret
+fly secrets set KEY=value
+```
+
+---
+
+## Local Development
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+# Fill in .env with your credentials
+python app.py
+```
+
+On first run you'll be prompted for a Telegram OTP. After that, the session is cached automatically.
