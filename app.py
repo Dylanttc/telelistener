@@ -117,7 +117,7 @@ IGNORE completely if ANY of the following apply:
 For MIXED messages (part selling, part looking for players): extract ONLY the selling parts at listed venues. If no selling parts at listed venues exist, respond with UNCLEAR.
 
 Return extracted courts in this exact format:
-Venue: <venue name>
+Venue: <full venue name exactly as written in the message, e.g. "YCK Secondary School" not "YCK", "Ang Mo Kio CC" not "AMK">
 Date: <date as DD Mon YYYY, e.g. "24 Mar 2026">
 Time: <start time> - <end time, e.g. "8PM - 10PM">
 
