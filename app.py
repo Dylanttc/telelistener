@@ -637,7 +637,9 @@ async def main():
                 log.warning("Could not parse booking from: %s", text[:60])
                 return
             try:
-                attendees = config.get("calendar_attendees", [])
+                attendees_env = os.getenv("CALENDAR_ATTENDEES", "").strip()
+                attendees = [e.strip() for e in attendees_env.split(",") if e.strip()]
+                log.info("Calendar attendees resolved: %s", attendees)
                 await create_calendar_event(parsed, attendees)
                 await event.reply("Okay, I've created a Google Calendar event.")
                 log.info("Calendar event created and confirmation sent")
