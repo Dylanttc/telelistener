@@ -1,4 +1,4 @@
-# Telelistener 🏸
+# Badminton Court Finder 🏸
 
 A personal automation bot that monitors Singapore badminton Telegram groups 24/7, filters out the noise, summarises court sale listings using AI, and automatically creates Google Calendar events when a court is purchased.
 
@@ -123,8 +123,8 @@ All configuration lives in [`config.yml`](config.yml) — no code changes needed
 
 ```yaml
 calendar_attendees:   # emails invited when a calendar event is created
-  - REDACTED
-  - REDACTED
+  - dylanttc95@gmail.com
+  - goweiwen@gmail.com
   # ...
 
 keywords:
@@ -177,7 +177,7 @@ Stored as [Fly.io secrets](https://fly.io/docs/apps/secrets/) in production. For
 ├── config.yml           # All keywords and filter rules
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Container definition for Fly.io
-├── fly.toml             # Fly.io app config (app: badminton-listener, region: sin)
+├── fly.toml             # Fly.io app config (app: badmintoncourtfinder, region: sin)
 ├── generate_session.py  # One-time script to generate a Telethon session string
 └── .env.example         # Template for local environment variables
 ```
